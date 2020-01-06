@@ -207,3 +207,58 @@ def disparity_estimation(tensorImage):
 
 	return moduleDisparity(tensorImage, moduleSemantics(tensorImage))
 # end
+
+
+## Define Ke's depth model
+import DepthNet
+ke_model = "./ke_model.pth.tar" ## Path to mode lfile
+
+if torch.cuda.is_available() and use_gpu:
+    device = torch.device("cuda")
+    Ke_DepthNet = DepthNet.DepthNet()
+    checkpoint = torch.load(ke_model)
+else:
+    device = torch.device("cpu")
+    Ke_DepthNet = DepthNet.DepthNet()
+    checkpoint = torch.load(ke_model, map_location='cpu')
+
+new_state_dict = OrderedDict()
+for k, v in checkpoint['state_dict'].items():
+    name = k[7:] # remove `module.`
+    if name in Ke_DepthNet.state_dict():
+        new_state_dict[name] = v   
+Ke_DepthNet.load_state_dict(new_state_dict)
+Ke_DepthNet.eval();
+
+def disparity_estimation_with_ke_depth(numpyImage):
+	img_size = [448, 448] # do not change this
+	img_transform = transforms.Compose([
+	        transforms.ToTensor(),
+	        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+	    ])
+	tmp_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+	ori_img = Image.fromarray(tmp_img)
+	ori_width, ori_height = ori_img.size
+	int_width = img_size[0]
+	int_height = img_size[1]
+
+	dblRatio = float(ori_width) / float(ori_height)
+
+	intWidth = min(int(512 * dblRatio), 512)
+	intHeight = min(int(512 / dblRatio), 512)
+
+	img = ori_img.resize((int_width, int_height), Image.ANTIALIAS)
+	tensor_img = img_transform(img).unsqueeze(0)	
+
+	with torch.no_grad():
+	    output = net(tensor_img)
+
+	depth = torch.nn.functional.interpolate(output,
+	    (intHeight, intWidth), mode="bilinear", align_corners=False)
+	depth = depth.squeeze().cpu().data.numpy()
+	depth -= depth.min()
+	depth /= depth.max()
+
+	tensorDisparity = torch.FloatTensor(depth).unsqueeze(0).cuda()
+	return tensorDisparity
+# end

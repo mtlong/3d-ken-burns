@@ -57,6 +57,11 @@ for strOption, strArgument in getopt.getopt(sys.argv[1:], '', [ strParameter[2:]
 	if strOption == '--out' and strArgument != '': arguments_strOut = strArgument # path to where the output should be stored
 # end
 
+if len(sys.argv) < 2:
+	depth_method = "default"
+else:
+	depth_method = sys.argv[1] ## Either "default" or "Ke"
+
 ##########################################################
 
 if __name__ == '__main__':
@@ -72,7 +77,13 @@ if __name__ == '__main__':
 
 	numpyImage = cv2.resize(src=numpyImage, dsize=(intWidth, intHeight), fx=0.0, fy=0.0, interpolation=cv2.INTER_AREA)
 
-	process_load(numpyImage, {})
+	if depth_method == "default":
+		process_load(numpyImage, {})
+	elif depth_method == "Ke":
+		process_load_ke_depth(numpyImage, {})
+	else:
+		print("error: Unrecognized depth method!")
+		exit(1)
 
 	objectFrom = {
 		'dblCenterU': intWidth / 2.0,

@@ -29,6 +29,39 @@ def process_load(numpyImage, objectSettings):
 	objectCommon['tensorInpaPoints'] = objectCommon['tensorRawPoints'].view(1, 3, -1)
 # end
 
+
+def process_load_ke_depth(numpyImage, objectSettings):
+	objectCommon['dblFocal'] = 1024 / 2.0
+	objectCommon['dblBaseline'] = 40.0
+	objectCommon['intWidth'] = numpyImage.shape[1]
+	objectCommon['intHeight'] = numpyImage.shape[0]
+
+	tensorImage = torch.FloatTensor(numpyImage.transpose(2, 0, 1)).unsqueeze(0).cuda() / 255.0
+	tensorDisparity = disparity_estimation_with_ke_depth(numpyImage)
+	tensorDisparity = disparity_adjustment(tensorImage, tensorDisparity)
+	tensorDisparity = disparity_refinement(tensorImage, tensorDisparity)
+	tensorDisparity = tensorDisparity / tensorDisparity.max() * objectCommon['dblBaseline']
+	tensorDepth = (objectCommon['dblFocal'] * objectCommon['dblBaseline']) / (tensorDisparity + 0.0000001)
+	tensorValid = (spatial_filter(tensorDisparity / tensorDisparity.max(), 'laplacian').abs() < 0.03).float()
+	tensorPoints = depth_to_points(tensorDepth * tensorValid, objectCommon['dblFocal'])
+	tensorUnaltered = depth_to_points(tensorDepth, objectCommon['dblFocal'])
+
+	objectCommon['dblDispmin'] = tensorDisparity.min().item()
+	objectCommon['dblDispmax'] = tensorDisparity.max().item()
+	objectCommon['objectDepthrange'] = cv2.minMaxLoc(src=tensorDepth[0, 0, 128:-128, 128:-128].detach().cpu().numpy(), mask=None)
+	objectCommon['tensorRawImage'] = tensorImage
+	objectCommon['tensorRawDisparity'] = tensorDisparity
+	objectCommon['tensorRawDepth'] = tensorDepth
+	objectCommon['tensorRawPoints'] = tensorPoints.view(1, 3, -1)
+	objectCommon['tensorRawUnaltered'] = tensorUnaltered.view(1, 3, -1)
+
+	objectCommon['tensorInpaImage'] = objectCommon['tensorRawImage'].view(1, 3, -1)
+	objectCommon['tensorInpaDisparity'] = objectCommon['tensorRawDisparity'].view(1, 1, -1)
+	objectCommon['tensorInpaDepth'] = objectCommon['tensorRawDepth'].view(1, 1, -1)
+	objectCommon['tensorInpaPoints'] = objectCommon['tensorRawPoints'].view(1, 3, -1)
+# end
+
+
 def process_inpaint(tensorShift):
 	objectInpainted = pointcloud_inpainting(objectCommon['tensorRawImage'], objectCommon['tensorRawDisparity'], tensorShift)
 
